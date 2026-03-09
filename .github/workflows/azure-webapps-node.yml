@@ -1,0 +1,53 @@
+// Example in your React Native app (simplified, requires error handling and proper UI integration)
+import storage from '@react-native-firebase/storage';
+import firestore from '@react-native-firebase/firestore';
+// Assuming you have an image picker library like react-native-image-picker
+import ImagePicker from 'react-native-image-picker'; // Example library
+
+async function uploadImageAndSendAsMessage(bookingId, userId) {
+  // 1. Let the user pick an image
+  ImagePicker.showImagePicker({}, async (response) => {
+    if (response.didCancel) {
+      console.log('User cancelled image picker');
+    } else if (response.error) {
+      console.log('ImagePicker Error: ', response.error);
+    } else {
+      const imageUri = response.uri;
+      const filename = imageUri.substring(imageUri.lastIndexOf('/') + 1);
+      const uploadUri = Platform.OS === 'ios' ? imageUri.replace('file://', '') : imageUri;
+
+      // 2. Upload the image to Cloud Storage
+      const storageRef = storage().ref(`chat_images/${bookingId}/${filename}`);
+      const task = storageRef.putFile(uploadUri);
+
+      try {
+        await task; // Wait for the upload to complete
+        const downloadURL = await storageRef.getDownloadURL();
+        console.log('Image uploaded to:', downloadURL);
+
+        // 3. Save the download URL as a message in Firestore
+        const newMessage = {
+          _id: firestore().collection('Bookings').doc(bookingId).collection('Messages').doc().id, // Generate a unique ID
+          createdAt: new Date(),
+          text: '', // Or an optional caption
+          user: {
+            _id: userId,
+            // name: 'User Name', // Add user name if available
+          },
+          image: downloadURL, // This is the key for GiftedChat to display the image
+        };
+
+        firestore()
+          .collection('Bookings')
+          .doc(bookingId)
+          .collection('Messages')
+          .add(newMessage);
+
+        console.log('Image message sent!');
+
+      } catch (e) {
+        console.error('Error uploading image or sending message:', e);
+      }
+    }
+  });
+}
